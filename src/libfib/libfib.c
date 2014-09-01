@@ -11,11 +11,11 @@ static void lf_init(void) __attribute__((constructor));
 static void lf_exit(void) __attribute__((destructor));
 
 static void lf_init(void) {
-	static char *args[] = { xstr(LIBFIB_SHARED), 0 };
+	static char *args[] = { xstr(SO_NAME), 0 };
 	static char **args_ = args;
 	static int num_args = 1;
 
-	printf("Testing libfib-%s\n", xstr(LIBFIB_FLAVOUR));
+	printf("Testing %s flavour\n", xstr(SO_FLAVOUR));
 	hs_init(&num_args, &args_);
 }
 

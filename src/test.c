@@ -99,7 +99,7 @@ int main(int num_args, char **args) {
 	void *libfib;
 
 	if (num_args != 2) {
-		fprintf(stderr, "Usage: %s LIBFIB_PATH\n", args[0]);
+		fprintf(stderr, "Usage: %s PATH\n", args[0]);
 		exit(EXIT_FAILURE);
 	}
 	if (!(libfib = dlopen(args[1], RTLD_LAZY))

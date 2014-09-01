@@ -1,14 +1,46 @@
-GHC_VERSION := $(shell ghc --numeric-version)
-GHC_PREFIX := $(shell dirname $(shell dirname $(shell which ghc)))
-GHC_INCLUDE := $(GHC_PREFIX)/lib/ghc-$(GHC_VERSION)/include
-GHC_THREADED := HSrts_thr-ghc$(GHC_VERSION)
+system := $(shell uname -s)
 
-UNAME_S := $(shell uname -s)
-ifeq ($(UNAME_S),Darwin)
-LIBFIB_SHARED := libfib.dylib
+so_name := libfib.so
+ifeq ($(system),Darwin)
+so_name := libfib.dylib
 endif
-ifeq ($(UNAME_S),Linux)
-LIBFIB_SHARED := libfib.so
+
+
+ghc_version := $(shell ghc --numeric-version)
+ghc_prefix  := $(shell dirname $(shell dirname $(shell which ghc)))
+ghc_include := $(ghc_prefix)/lib/ghc-$(ghc_version)/include
+
+ghc_flags            := -O2 -Wall
+dynamic_ghc_flags    := $(ghc_flags) -dynamic -outputdir=dist/dynamic
+static_ghc_flags     := $(ghc_flags) -static -outputdir=dist/static
+dynamic_so_ghc_flags := $(dynamic_ghc_flags) -shared
+static_so_ghc_flags  := $(static_ghc_flags) -shared
+ifeq ($(system),Darwin)
+static_so_ghc_flags  += -optl-Wl,-no_compact_unwind
+endif
+
+ghc_rts_pkg_version         := $(shell ghc-pkg field --simple-output rts version)
+dynamic_so_ghc_rts_pkg_libs := -lHSrts_thr-ghc$(ghc_version)
+static_so_ghc_rts_pkg_libs  := rts-$(ghc_rts_pkg_version)/libHSrts_thr.a \
+                               rts-$(ghc_rts_pkg_version)/libCffi_thr.a
+
+dynamic_so_ghc_libs := $(dynamic_so_ghc_rts_pkg_libs)
+
+
+cc_flags := -O2
+ifeq ($(system),Darwin)
+cc_flags += -Weverything
+else
+cc_flags += -Wall -fPIC
+endif
+
+test_cc_flags      := $(cc_flags) -Isrc/libfib
+o_cc_flags         := $(cc_flags) -I$(ghc_include) -DSO_NAME=$(so_name)
+dynamic_o_cc_flags := $(o_cc_flags) -DSO_FLAVOUR=dynamic -Idist/dynamic
+static_o_cc_flags  := $(o_cc_flags) -DSO_FLAVOUR=static -Idist/static
+
+ifneq ($(system),Darwin)
+test_cc_libs := -ldl -lpthread
 endif
 
 
@@ -17,60 +49,74 @@ all: test
 
 .PHONY: build clean test
 
-build: dist/main dynamic-build static-build
+build: dist/test dynamic-build static-build
 
 clean:
 	rm -rf dist
 
-test: dist/main dynamic-test static-test
+test: dist/test dynamic-test static-test
 
-dist/main: src/libfib/libfib.h src/main.c
-	@mkdir -p dist
-	cc -Isrc/libfib -O2 -Wall -o dist/main src/main.c -std=c99 -ldl -lpthread
+dist:
+	mkdir dist
+
+dist/test: src/test.c src/libfib/libfib.h | dist
+	cc $(test_cc_flags) -o $@ $< $(test_cc_libs)
 
 
-.PHONY: dynamic dynamic-build dynamic-clean dynamic-test
+.PHONY: dynamic-build dynamic-clean dynamic-test
 
-dynamic-build: dist/dynamic/$(LIBFIB_SHARED)
+dynamic-build: dist/dynamic/$(so_name)
 
 dynamic-clean:
 	rm -rf dist/dynamic
 
-dynamic-test: dist/main dynamic-build
-	dist/main dist/dynamic/$(LIBFIB_SHARED)
+dynamic-test: dist/test dynamic-build
+	dist/test dist/dynamic/$(so_name)
 
-dist/dynamic/Fib.o dist/dynamic/Fib_stub.h: src/libfib/Fib.hs
-	@mkdir -p dist
-	ghc -O2 -c -dynamic -outputdir=dist/dynamic src/libfib/Fib.hs
+dist/dynamic: | dist
+	mkdir dist/dynamic
 
-dist/dynamic/libfib.o: src/libfib/libfib.h src/libfib/libfib.c dist/dynamic/Fib_stub.h
-	cc -DLIBFIB_FLAVOUR=dynamic -DLIBFIB_SHARED=$(LIBFIB_SHARED) -I$(GHC_INCLUDE) -Idist/dynamic -O2 -Wall -c -fPIC -o dist/dynamic/libfib.o -std=c99 src/libfib/libfib.c
+dist/dynamic/Fib.o dist/dynamic/Fib_stub.h: src/libfib/Fib.hs | dist/dynamic
+	ghc -c $(dynamic_ghc_flags) $^
 
-dist/dynamic/$(LIBFIB_SHARED): dist/dynamic/Fib.o dist/dynamic/libfib.o
-	ghc -O2 -dynamic -outputdir=dist/dynamic -o dist/dynamic/$(LIBFIB_SHARED) -shared dist/dynamic/Fib.o dist/dynamic/libfib.o -l$(GHC_THREADED)
+dist/dynamic/libfib.o: src/libfib/libfib.c src/libfib/libfib.h dist/dynamic/Fib_stub.h
+	cc -c $(dynamic_o_cc_flags) -o $@ $<
+
+dist/dynamic/$(so_name): dist/dynamic/libfib.o dist/dynamic/Fib.o
+	ghc $(dynamic_so_ghc_flags) -o $@ $^ $(dynamic_so_ghc_libs)
 
 
-.PHONY: static static-build static-clean static-test
+dist/ghc_pkgs: dist/dynamic/libfib.o dist/dynamic/Fib.o
+	$(eval ghc_pkgs := \
+	  $(patsubst -lHS%-ghc$(ghc_version),%,\
+	    $(filter -lHS%-ghc$(ghc_version),\
+	      $(shell ghc $(dynamic_so_ghc_flags) -pgml echo $^ 2>&1))))
+	echo $(ghc_pkgs) >dist/ghc_pkgs
 
-static-build: dist/static/$(LIBFIB_SHARED)
+
+.PHONY: static-build static-clean static-test
+
+static-build: dist/static/$(so_name)
 
 static-clean:
 	rm -rf dist/static
 
-static-test: dist/main static-build
-	dist/main dist/static/$(LIBFIB_SHARED)
+static-test: dist/test static-build
+	dist/test dist/static/$(so_name)
 
-dist/static/Fib.o dist/static/Fib_stub.h: src/libfib/Fib.hs
-	@mkdir -p dist
-	ghc -O2 -c -outputdir=dist/static -static src/libfib/Fib.hs
+dist/static: | dist
+	mkdir dist/static
 
-dist/static/libfib.o: src/libfib/libfib.h src/libfib/libfib.c dist/static/Fib_stub.h
-	cc -DLIBFIB_FLAVOUR=static -DLIBFIB_SHARED=$(LIBFIB_SHARED) -I$(GHC_INCLUDE) -Idist/static -O2 -Wall -c -fPIC -o dist/static/libfib.o -std=c99 src/libfib/libfib.c
+dist/static/Fib.o dist/static/Fib_stub.h: src/libfib/Fib.hs | dist/static
+	ghc -c $(static_ghc_flags) $^
 
-dist/static/$(LIBFIB_SHARED): dist/static/Fib.o dist/static/libfib.o
-	ghc -O2 -outputdir=dist/static -o dist/static/$(LIBFIB_SHARED) -shared -static dist/static/Fib.o dist/static/libfib.o \
-	  $(GHC_PREFIX)/lib/ghc-$(GHC_VERSION)/base-*/libHSbase-*.a \
-	  $(GHC_PREFIX)/lib/ghc-$(GHC_VERSION)/ghc-prim-*/libHSghc-prim-*.a \
-	  $(GHC_PREFIX)/lib/ghc-$(GHC_VERSION)/integer-gmp-*/libHSinteger-gmp-*.a \
-	  $(GHC_PREFIX)/lib/ghc-$(GHC_VERSION)/rts-*/libCffi_thr.a \
-	  $(GHC_PREFIX)/lib/ghc-$(GHC_VERSION)/rts-*/libHSrts_thr.a
+dist/static/libfib.o: src/libfib/libfib.c src/libfib/libfib.h dist/static/Fib_stub.h
+	cc -c $(static_o_cc_flags) -o $@ $<
+
+dist/static/$(so_name): dist/static/libfib.o dist/static/Fib.o dist/ghc_pkgs
+	$(eval libs := \
+	  $(patsubst %,$(ghc_prefix)/lib/ghc-$(ghc_version)/%,\
+	    $(static_so_ghc_rts_pkg_libs) \
+	      $(join $(patsubst %,%/libHS,$(ghc_pkgs)),\
+	        $(patsubst %,%.a,$(ghc_pkgs)))))
+	ghc $(static_so_ghc_flags) -o $@ $(filter-out dist/ghc_pkgs,$^) $(libs)

@@ -3,43 +3,62 @@ haskell-shared-example
 
 How to call Haskell shared libraries from C.
 
-Thanks to [Albert Lai](http://www.vex.net/~trebla/haskell/so.xhtml).
+Thanks to [Albert Lai](http://www.vex.net/~trebla/haskell/so.xhtml) and everyone on [#ghc](irc://irc.freenode.net/#ghc).
 
 
 Usage
 -----
 
-Tested on OS X with GHC 7.8.3.  The dynamic flavour also works on Linux, but the static flavour requires rebuilding all packages statically, with `-fPIC`.
+Tested on OS X with GHC 7.8.3.
+
+    $ make dist/test
+    mkdir dist
+    cc -O2 -Weverything -Isrc/libfib -o dist/test src/test.c
 
 
-### Dynamic
+### Dynamic flavour
+
+A shared library with a pure Haskell centre, linked with dynamic Haskell libraries.
+
+    $ make dynamic-build
+    mkdir dist/dynamic
+    ghc -c -O2 -Wall -dynamic -outputdir=dist/dynamic src/libfib/Fib.hs
+    cc -c -O2 -Weverything -I/opt/lib/ghc-7.8.3/include
+      -DSO_NAME=libfib.dylib -DSO_FLAVOUR=dynamic -Idist/dynamic
+      -o dist/dynamic/libfib.o src/libfib/libfib.c
+    ghc -O2 -Wall -dynamic -outputdir=dist/dynamic -shared
+      -o dist/dynamic/libfib.dylib dist/dynamic/libfib.o dist/dynamic/Fib.o -lHSrts_thr-ghc7.8.3
 
     $ make dynamic-test
-    cc -Isrc/libfib -O2 -Wall -o dist/main src/main.c -std=c99 -ldl -lpthread
-    ghc -O2 -c -dynamic -outputdir=dist/dynamic src/libfib/Fib.hs
-    cc -DLIBFIB_FLAVOUR=dynamic -DLIBFIB_SHARED=libfib.dylib -I/opt/lib/ghc-7.8.3/include -Idist/dynamic -O2 -Wall -c -fPIC -o dist/dynamic/libfib.o -std=c99 src/libfib/libfib.c
-    ghc -O2 -dynamic -outputdir=dist/dynamic -o dist/dynamic/libfib.dylib -shared dist/dynamic/Fib.o dist/dynamic/libfib.o -lHSrts_thr-ghc7.8.3
-    dist/main dist/dynamic/libfib.dylib
-    Testing libfib-dynamic
+    dist/test dist/dynamic/libfib.dylib
+    Testing dynamic flavour
       Simple test:    PASS
       Threaded test:  PASS
 
 
-### Static
+### Static flavour
+
+A shared library with a pure Haskell centre, linked with static Haskell libraries.
+
+    $ make static-build
+    mkdir dist/static
+    ghc -c -O2 -Wall -static -outputdir=dist/static src/libfib/Fib.hs
+    cc -c -O2 -Weverything -I/opt/lib/ghc-7.8.3/include
+      -DSO_NAME=libfib.dylib -DSO_FLAVOUR=static -Idist/static
+      -o dist/static/libfib.o src/libfib/libfib.c
+    echo base-4.7.0.1 integer-gmp-0.5.1.0 ghc-prim-0.3.1.0 >dist/ghc_pkgs
+    ghc -O2 -Wall -static -outputdir=dist/static -shared
+      -optl-Wl,-no_compact_unwind
+      -o dist/static/libfib.dylib dist/static/libfib.o dist/static/Fib.o
+      /opt/lib/ghc-7.8.3/rts-1.0/libHSrts_thr.a
+      /opt/lib/ghc-7.8.3/rts-1.0/libCffi_thr.a
+      /opt/lib/ghc-7.8.3/base-4.7.0.1/libHSbase-4.7.0.1.a
+      /opt/lib/ghc-7.8.3/integer-gmp-0.5.1.0/libHSinteger-gmp-0.5.1.0.a
+      /opt/lib/ghc-7.8.3/ghc-prim-0.3.1.0/libHSghc-prim-0.3.1.0.a
 
     $ make static-test
-    cc -Isrc/libfib -O2 -Wall -o dist/main src/main.c -std=c99 -ldl -lpthread
-    ghc -O2 -c -outputdir=dist/static -static src/libfib/Fib.hs
-    cc -DLIBFIB_FLAVOUR=static -DLIBFIB_SHARED=libfib.dylib -I/opt/lib/ghc-7.8.3/include -Idist/static -O2 -Wall -c -fPIC -o dist/static/libfib.o -std=c99 src/libfib/libfib.c
-    ghc -O2 -outputdir=dist/static -o dist/static/libfib.dylib -shared -static dist/static/Fib.o dist/static/libfib.o \
-      /opt/lib/ghc-7.8.3/base-*/libHSbase-*.a \
-      /opt/lib/ghc-7.8.3/ghc-prim-*/libHSghc-prim-*.a \
-      /opt/lib/ghc-7.8.3/integer-gmp-*/libHSinteger-gmp-*.a \
-      /opt/lib/ghc-7.8.3/rts-*/libCffi_thr.a \
-      /opt/lib/ghc-7.8.3/rts-*/libHSrts_thr.a
-    ld: warning: could not create compact unwind for _ffi_call_unix64: does not use RBP or RSP based frame
-    dist/main dist/static/libfib.dylib
-    Testing libfib-static
+    dist/test dist/static/libfib.dylib
+    Testing static flavour
       Simple test:    PASS
       Threaded test:  PASS
 
