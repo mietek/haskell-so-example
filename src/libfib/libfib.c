@@ -1,4 +1,5 @@
 #include <HsFFI.h>
+#include <stdio.h>
 
 #include "Fib_stub.h"
 #include "libfib.h"
@@ -14,6 +15,7 @@ static void lf_init(void) {
 	static char **args_ = args;
 	static int num_args = 1;
 
+	printf("Testing libfib-%s\n", xstr(LIBFIB_FLAVOUR));
 	hs_init(&num_args, &args_);
 }
 
