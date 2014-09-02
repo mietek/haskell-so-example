@@ -19,12 +19,9 @@ ifeq ($(system),Darwin)
 static_so_ghc_flags  += -optl-Wl,-no_compact_unwind
 endif
 
-ghc_rts_pkg_version         := $(shell ghc-pkg field --simple-output rts version)
-dynamic_so_ghc_rts_pkg_libs := -lHSrts_thr-ghc$(ghc_version)
-static_so_ghc_rts_pkg_libs  := rts-$(ghc_rts_pkg_version)/libHSrts_thr.a \
-                               rts-$(ghc_rts_pkg_version)/libCffi_thr.a
-
-dynamic_so_ghc_libs := $(dynamic_so_ghc_rts_pkg_libs)
+ghc_rts_version      := $(shell ghc-pkg field --simple-output rts version)
+dynamic_ghc_rts_libs := -lHSrts_thr-ghc$(ghc_version)
+static_ghc_rts_libs  := rts-$(ghc_rts_version)/libHSrts_thr.a rts-$(ghc_rts_version)/libCffi_thr.a
 
 
 cc_flags := -O2
@@ -83,7 +80,7 @@ dist/dynamic/libfib.o: src/libfib/libfib.c src/libfib/libfib.h dist/dynamic/Fib_
 	cc -c $(dynamic_o_cc_flags) -o $@ $<
 
 dist/dynamic/$(so_name): dist/dynamic/libfib.o dist/dynamic/Fib.o
-	ghc $(dynamic_so_ghc_flags) -o $@ $^ $(dynamic_so_ghc_libs)
+	ghc $(dynamic_so_ghc_flags) -o $@ $^ $(dynamic_ghc_rts_libs)
 
 
 dist/ghc_pkgs: dist/dynamic/libfib.o dist/dynamic/Fib.o
@@ -116,7 +113,7 @@ dist/static/libfib.o: src/libfib/libfib.c src/libfib/libfib.h dist/static/Fib_st
 dist/static/$(so_name): dist/static/libfib.o dist/static/Fib.o dist/ghc_pkgs
 	$(eval libs := \
 	  $(patsubst %,$(ghc_prefix)/lib/ghc-$(ghc_version)/%,\
-	    $(static_so_ghc_rts_pkg_libs) \
+	    $(static_ghc_rts_libs) \
 	      $(join $(patsubst %,%/libHS,$(ghc_pkgs)),\
 	        $(patsubst %,%.a,$(ghc_pkgs)))))
 	ghc $(static_so_ghc_flags) -o $@ $(filter-out dist/ghc_pkgs,$^) $(libs)
