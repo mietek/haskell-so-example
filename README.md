@@ -1,5 +1,5 @@
-haskell-shared-example
-======================
+haskell-so-example
+==================
 
 How to call Haskell shared libraries from C.  Runtime loading.  Dynamic and shared flavours.
 
@@ -71,4 +71,4 @@ References
 License
 -------
 
-[MIT](https://github.com/mietek/embed-hs/blob/master/LICENSE.md) © [Miëtek Bak](http://mietek.io/)
+[MIT](https://github.com/mietek/haskell-so-example/blob/master/LICENSE.md) © [Miëtek Bak](http://mietek.io/)
