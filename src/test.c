@@ -18,13 +18,18 @@ static lf_fib_ptr_t g_lf_fib;
 static lf_thread_done_ptr_t g_lf_thread_done;
 
 
-static void simple_test(void) {
+static int simple_test(void) {
 	int result;
 
 	printf("  Simple test:    ");
 	fflush(stdout);
 	result = g_lf_fib(FNORD);
-	printf("%s\n", result == FIB_42 ? "PASS" : "FAIL");
+	if (result == FIB_42) {
+		printf("PASS\n");
+		return 0;
+	}
+	printf("FAIL\n");
+	return 1;
 }
 
 
@@ -60,7 +65,7 @@ static void *supervisor_main(void *arg __attribute__((__unused__))) {
 }
 
 
-static void threaded_test(void) {
+static int threaded_test(void) {
 	pthread_attr_t attr;
 	pthread_t supervisor;
 	pthread_t workers[FNORD];
@@ -91,12 +96,18 @@ static void threaded_test(void) {
 	for (i = 0; i < FNORD; i++) {
 		result += g_results[i];
 	}
-	printf("%s\n", result == SUM_FIB_0_41 ? "PASS" : "FAIL");
+	if (result == SUM_FIB_0_41) {
+		printf("PASS\n");
+		return 0;
+	}
+	printf("FAIL\n");
+	return 1;
 }
 
 
 int main(int num_args, char **args) {
 	void *libfib;
+	int status;
 
 	if (num_args != 2) {
 		fprintf(stderr, "Usage: %s PATH\n", args[0]);
@@ -108,8 +119,7 @@ int main(int num_args, char **args) {
 		fprintf(stderr, "Error loading shared library: %s\n", dlerror());
 		exit(EXIT_FAILURE);
 	}
-	simple_test();
-	threaded_test();
+	status = simple_test() || threaded_test();
 	dlclose(libfib);
-	pthread_exit(NULL);
+	return status;
 }
