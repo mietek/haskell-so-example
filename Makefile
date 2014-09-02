@@ -13,8 +13,10 @@ ghc_include := $(ghc_prefix)/lib/ghc-$(ghc_version)/include
 ghc_flags            := -O2 -Wall
 dynamic_ghc_flags    := $(ghc_flags) -dynamic -outputdir=dist/dynamic
 static_ghc_flags     := $(ghc_flags) -static -outputdir=dist/static
+static2_ghc_flags    := $(ghc_flags) -static -no-hs-main -staticlib -outputdir=dist/static2
 dynamic_so_ghc_flags := $(dynamic_ghc_flags) -shared
 static_so_ghc_flags  := $(static_ghc_flags) -shared
+static2_so_ghc_flags := $(ghc_flags) -static -shared -optl-Wl,-no_compact_unwind,-force_load -outputdir=dist/static2
 ifeq ($(system),Darwin)
 static_so_ghc_flags  += -optl-Wl,-no_compact_unwind
 endif
@@ -38,6 +40,7 @@ test_cc_flags      := $(cc_flags) -Isrc/libfib
 o_cc_flags         := $(cc_flags) -I$(ghc_include) -DSO_NAME=$(so_name)
 dynamic_o_cc_flags := $(o_cc_flags) -DSO_FLAVOUR=dynamic -Idist/dynamic
 static_o_cc_flags  := $(o_cc_flags) -DSO_FLAVOUR=static -Idist/static
+static2_o_cc_flags := $(o_cc_flags) -DSO_FLAVOUR=static2 -Idist/static2
 
 ifneq ($(system),Darwin)
 test_cc_libs := -ldl -lpthread
@@ -49,12 +52,12 @@ all: test
 
 .PHONY: build clean test
 
-build: dist/test dynamic-build static-build
+build: dist/test dynamic-build static-build static2-build
 
 clean:
 	rm -rf dist
 
-test: dist/test dynamic-test static-test
+test: dist/test dynamic-test static-test static2-test
 
 dist:
 	mkdir dist
@@ -120,3 +123,29 @@ dist/static/$(so_name): dist/static/libfib.o dist/static/Fib.o dist/ghc_pkgs
 	      $(join $(patsubst %,%/libHS,$(ghc_pkgs)),\
 	        $(patsubst %,%.a,$(ghc_pkgs)))))
 	ghc $(static_so_ghc_flags) -o $@ $(filter-out dist/ghc_pkgs,$^) $(libs)
+
+
+.PHONY: static2 static2-clean static2-test
+
+static2-build: dist/static2/$(so_name)
+
+static2-clean:
+	rm -rf dist/static2
+
+static2-test: dist/test static2-build
+	dist/test dist/static2/$(so_name)
+
+dist/static2: | dist
+	mkdir dist/static2
+
+dist/static2/Fib.o dist/static2/Fib_stub.h: src/libfib/Fib.hs | dist/static2
+	ghc -c $(static2_ghc_flags) $^
+
+dist/static2/libfib.o: src/libfib/libfib.c src/libfib/libfib.h dist/static2/Fib_stub.h
+	cc -c $(static2_o_cc_flags) -o $@ $<
+
+dist/static2/libfib.a: dist/static2/libfib.o dist/static2/Fib.o
+	ghc $(static2_ghc_flags) -o $@ $^
+
+dist/static2/$(so_name): dist/static2/libfib.a
+	ghc $(static2_so_ghc_flags) -o $@ $<
