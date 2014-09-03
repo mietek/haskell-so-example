@@ -54,7 +54,7 @@ clean:
 test: dist/test dynamic-test static-test
 
 dist:
-	mkdir dist
+	mkdir $@
 
 dist/test: src/test.c src/libfib/libfib.h | dist
 	cc $(test_cc_flags) -o $@ $< $(test_cc_libs)
@@ -71,7 +71,7 @@ dynamic-test: dist/test dynamic-build
 	dist/test dist/dynamic/$(so_name)
 
 dist/dynamic: | dist
-	mkdir dist/dynamic
+	mkdir $@
 
 dist/dynamic/Fib.o dist/dynamic/Fib_stub.h: src/libfib/Fib.hs | dist/dynamic
 	ghc -c $(dynamic_ghc_flags) $^
@@ -102,7 +102,7 @@ static-test: dist/test static-build
 	dist/test dist/static/$(so_name)
 
 dist/static: | dist
-	mkdir dist/static
+	mkdir $@
 
 dist/static/Fib.o dist/static/Fib_stub.h: src/libfib/Fib.hs | dist/static
 	ghc -c $(static_ghc_flags) $^
