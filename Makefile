@@ -38,6 +38,8 @@ static_o_cc_flags  := $(o_cc_flags) -DSO_FLAVOUR=static -Idist/static
 
 ifneq ($(system),Darwin)
 test_cc_libs := -ldl -lpthread
+else
+test_cc_libs :=
 endif
 
 
